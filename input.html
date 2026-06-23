@@ -58,7 +58,7 @@
                     </div>
                     <div class="space-y-1.5">
                         <label class="text-xs font-semibold text-slate-400 tracking-wide">总投注金额 (元)</label>
-                        <input type="number" id="bet_amount" required min="0" placeholder="0" 
+                        <input type="number" id="bet_amount" required min="0" step="0.1" placeholder="0.0" 
                                class="w-full bg-black/40 border border-slate-800 focus:border-amber-500 focus:outline-none rounded-xl px-4 py-2.5 font-mono text-sm text-slate-200 transition-all">
                     </div>
                 </div>
@@ -89,13 +89,13 @@
 
                 <div id="result-fields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-800/60 pt-4">
                     <div class="space-y-1.5">
-                        <label class="text-xs font-semibold text-slate-400 tracking-wide">开奖号码 (3位数字)</label>
-                        <input type="text" id="draw_numbers" placeholder="例如：4, 5, 6" 
+                        <label class="text-xs font-semibold text-slate-400 tracking-wide">开奖号码 (3位连续数字)</label>
+                        <input type="text" id="draw_numbers" maxlength="3" pattern="\d{3}" placeholder="例如直接输入：456" 
                                class="w-full bg-black/40 border border-slate-800 focus:border-amber-500 focus:outline-none rounded-xl px-4 py-2.5 font-mono text-sm text-slate-200 transition-all">
                     </div>
                     <div class="space-y-1.5">
                         <label class="text-xs font-semibold text-slate-400 tracking-wide">总中奖金额 (元)</label>
-                        <input type="number" id="prize_amount" min="0" placeholder="0" 
+                        <input type="number" id="prize_amount" min="0" step="0.1" placeholder="0.0" 
                                class="w-full bg-black/40 border border-slate-800 focus:border-amber-500 focus:outline-none rounded-xl px-4 py-2.5 font-mono text-sm text-slate-200 transition-all">
                     </div>
                 </div>
@@ -136,7 +136,6 @@
                 drawNumbersInput.setAttribute('required', 'required');
                 prizeAmountInput.setAttribute('required', 'required');
                 
-                // 如果是未中奖，奖金默认为 0
                 if (status === 'lost') {
                     prizeAmountInput.value = 0;
                 }
@@ -150,39 +149,41 @@
             const submitBtn = document.getElementById('submit-btn');
             const alertBox = document.getElementById('alert-box');
             
-            // 按钮进入加载状态
             submitBtn.disabled = true;
             submitBtn.innerText = '正在上传数据...';
             
-            // 1. 获取基本表单数据
             const issue_number = document.getElementById('issue_number').value.trim();
             const draw_date = document.getElementById('draw_date').value;
             const bet_type = document.getElementById('bet_type').value;
             const bet_amount = parseFloat(document.getElementById('bet_amount').value);
             const status = document.querySelector('input[name="status"]:checked').value;
 
-            // 2. 解析大底号码：将文本框中通过逗号、空格或换行分隔的号码提取成数组
+            // 解析大底号码
             const rawBetsText = document.getElementById('my_bets').value;
             const my_bets = rawBetsText
-                .split(/[\s,，\n]+/) // 兼容中英文逗号、空格和换行
+                .split(/[\s,，\n]+/) 
                 .map(item => item.trim())
                 .filter(item => item.length > 0);
 
-            // 3. 解析开奖号码与中奖金额
+            // 解析开奖号码与中奖金额
             let draw_numbers = null;
             let prize_amount = 0;
 
             if (status !== 'pending') {
-                const rawNumbers = document.getElementById('draw_numbers').value;
-                draw_numbers = rawNumbers
-                    .split(/[\s,，]+/)
-                    .map(item => item.trim())
-                    .filter(item => item.length > 0);
+                const rawNumbers = document.getElementById('draw_numbers').value.trim();
+                
+                // 🚀 优化 2 核心核心处理逻辑：把输入的 "456" 智能切分成 ['4', '5', '6']
+                if (rawNumbers.length === 3) {
+                    draw_numbers = rawNumbers.split('');
+                } else {
+                    // 防呆设计：万一输错了不是3位，依然尝试按常规切分
+                    draw_numbers = rawNumbers.split(/[\s,，]*/).filter(item => item.length > 0);
+                }
                 
                 prize_amount = parseFloat(document.getElementById('prize_amount').value || 0);
             }
 
-            // 4. 将打包好的对象上传至 Supabase
+            // 上传至 Supabase
             const { error } = await dbClient
                 .from('lottery_records')
                 .insert([
@@ -198,7 +199,6 @@
                     }
                 ]);
 
-            // 5. 结果反馈
             if (error) {
                 console.error('上传失败:', error);
                 alertBox.className = "text-sm p-4 rounded-xl border bg-rose-950/20 border-rose-500/30 text-rose-400";
@@ -212,16 +212,13 @@
                 alertBox.innerText = `🎉 第 ${issue_number} 期记录已完美保存！已成功解析 ${my_bets.length} 注大底号码。`;
                 alertBox.classList.remove('hidden');
                 
-                // 重置表单，以便下一轮录入
                 document.getElementById('lottery-form').reset();
                 document.getElementById('draw_date').valueAsDate = new Date();
                 toggleStatusFields('pending');
                 
-                // 恢复按钮状态
                 submitBtn.disabled = false;
                 submitBtn.innerText = '保存记录并上传数据库';
                 
-                // 滚回顶部看成功提示
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
         }
