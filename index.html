@@ -32,17 +32,17 @@
         <section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div class="bg-slate-900/40 border border-slate-800/80 backdrop-blur-md rounded-2xl p-5 shadow-sm hover:border-slate-700 transition-all">
                 <p class="text-xs font-medium text-slate-400 tracking-wider uppercase">总投注金额</p>
-                <p id="stat-total-bet" class="text-2xl md:text-3xl font-bold text-slate-200 mt-2">¥0</p>
+                <p id="stat-total-bet" class="text-2xl md:text-3xl font-bold text-slate-200 mt-2">¥0.0</p>
             </div>
 
             <div class="bg-slate-900/40 border border-slate-800/80 backdrop-blur-md rounded-2xl p-5 shadow-sm hover:border-slate-700 transition-all">
                 <p class="text-xs font-medium text-slate-400 tracking-wider uppercase">总中奖金额</p>
-                <p id="stat-total-prize" class="text-2xl md:text-3xl font-bold text-amber-400 mt-2">¥0</p>
+                <p id="stat-total-prize" class="text-2xl md:text-3xl font-bold text-amber-400 mt-2">¥0.0</p>
             </div>
 
             <div id="stat-net-profit-card" class="border backdrop-blur-md rounded-2xl p-5 shadow-md transition-all bg-slate-900/40 border-slate-800/80">
                 <p class="text-xs font-medium text-slate-400 tracking-wider uppercase">总盈亏净值</p>
-                <p id="stat-net-profit" class="text-2xl md:text-3xl font-bold mt-2 text-slate-200">¥0</p>
+                <p id="stat-net-profit" class="text-2xl md:text-3xl font-bold mt-2 text-slate-200">¥0.00</p>
             </div>
 
             <div class="bg-slate-900/40 border border-slate-800/80 backdrop-blur-md rounded-2xl p-5 shadow-sm hover:border-slate-700 transition-all">
@@ -76,7 +76,6 @@
         const SUPABASE_URL = 'https://ybjgkfhcagqqfnqekycr.supabase.co'; 
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InliamdrZmhjYWdxcWZucWVreWNyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2OTk0OTUsImV4cCI6MjA5NzI3NTQ5NX0.jG4Hm9JPPBQ9J4jQKCtZDa5MDF_vGYlUo7drur8Xv6g';
         
-        // 🚀 核心改动：用 dbClient 代替 supabase 变量名，彻底避免和官方 SDK 名字撞车
         const dbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // ==========================================
@@ -90,7 +89,6 @@
 
             const container = document.getElementById('records-container');
 
-            // 使用全新变量名 dbClient 进行查询
             const { data: records, error } = await dbClient
                 .from('lottery_records')
                 .select('*')
@@ -167,7 +165,7 @@
                             <div class="text-base font-bold font-mono ${itemProfit >= 0 ? 'text-emerald-400' : 'text-slate-400'}">
                                 ${itemProfit >= 0 ? '+¥' + itemProfit.toFixed(2) : '-¥' + Math.abs(itemProfit).toFixed(2)}
                             </div>
-                            <div class="text-[10px] text-slate-500 mt-0.5">投 ¥${betAmount.toFixed(0)} / 奖 ¥${prizeAmount.toFixed(0)}</div>
+                            <div class="text-[10px] text-slate-500 mt-0.5">投 ¥${betAmount.toFixed(1)} / 奖 ¥${prizeAmount.toFixed(1)}</div>
                         </div>
                     </div>
                 `;
@@ -177,8 +175,9 @@
             const netProfit = totalPrize - totalBet;
             const winRate = totalCount > 0 ? Math.round((wonCount / totalCount) * 100) : 0;
 
-            document.getElementById('stat-total-bet').innerText = `¥${totalBet.toFixed(0)}`;
-            document.getElementById('stat-total-prize').innerText = `¥${totalPrize.toFixed(0)}`;
+            // 🚀 核心修改：顶部的总金额统计卡片同样应用 .toFixed(1) 保持一致
+            document.getElementById('stat-total-bet').innerText = `¥${totalBet.toFixed(1)}`;
+            document.getElementById('stat-total-prize').innerText = `¥${totalPrize.toFixed(1)}`;
             document.getElementById('record-count-badge').innerText = `${records.length} 期`;
             document.getElementById('stat-win-rate').innerText = `${winRate}%`;
 
