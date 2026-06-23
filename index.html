@@ -71,13 +71,13 @@
 
     <script>
         // ==========================================
-        // 🔐 Supabase 初始化配置 
+        // 🔐 Supabase 初始化配置
         // ==========================================
         const SUPABASE_URL = 'https://ybjgkfhcagqqfnqekycr.supabase.co'; 
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InliamdrZmhjYWdxcWZucWVreWNyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2OTk0OTUsImV4cCI6MjA5NzI3NTQ5NX0.jG4Hm9JPPBQ9J4jQKCtZDa5MDF_vGYlUo7drur8Xv6g';
         
-        // 全局只在这里声明一次 supabase 实例，安全无虞
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // 🚀 核心改动：用 dbClient 代替 supabase 变量名，彻底避免和官方 SDK 名字撞车
+        const dbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // ==========================================
         // 📊 实时数据拉取与动态渲染
@@ -90,8 +90,8 @@
 
             const container = document.getElementById('records-container');
 
-            // 1. 从 Supabase 按时间倒序拉取全部投注记录
-            const { data: records, error } = await supabase
+            // 使用全新变量名 dbClient 进行查询
+            const { data: records, error } = await dbClient
                 .from('lottery_records')
                 .select('*')
                 .order('draw_date', { ascending: false });
@@ -110,7 +110,6 @@
 
             container.innerHTML = ''; 
 
-            // 2. 遍历数据生成卡片流
             records.forEach(record => {
                 const betAmount = parseFloat(record.bet_amount || 0);
                 const prizeAmount = parseFloat(record.prize_amount || 0);
@@ -121,13 +120,9 @@
                 if (record.status === 'won') wonCount++;
 
                 const itemProfit = prizeAmount - betAmount;
-
-                // 容错处理：确保 my_bets 存在才读取长度
                 const totalNumbersCount = record.my_bets ? record.my_bets.length : 0;
-                // 容错处理：处理日期截取
                 const formattedDate = record.draw_date ? record.draw_date.substring(5) : '未知'; 
 
-                // 4. 生成开奖号码立体球 HTML
                 let ballsHtml = `<span class="text-xs text-slate-500 py-1 px-4">等待开奖</span>`;
                 if (record.draw_numbers && record.draw_numbers.length > 0) {
                     ballsHtml = record.draw_numbers.map(num => `
@@ -137,7 +132,6 @@
                     `).join('');
                 }
 
-                // 5. 状态标签 HTML
                 let statusBadge = '';
                 if (record.status === 'won') {
                     statusBadge = `<span class="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shadow-sm">🎉 已中奖</span>`;
@@ -147,7 +141,6 @@
                     statusBadge = `<span class="inline-flex items-center text-[11px] font-medium px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400">🛡️ 待开奖</span>`;
                 }
 
-                // 6. 组装整行卡片
                 const card = document.createElement('div');
                 card.className = "group bg-slate-900/20 border border-slate-800/60 rounded-xl p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-900/40 hover:border-slate-700/80 hover:-translate-y-0.5 transition-all duration-200";
                 card.innerHTML = `
@@ -181,7 +174,6 @@
                 container.appendChild(card);
             });
 
-            // 7. 更新顶端面板全局资产数据
             const netProfit = totalPrize - totalBet;
             const winRate = totalCount > 0 ? Math.round((wonCount / totalCount) * 100) : 0;
 
