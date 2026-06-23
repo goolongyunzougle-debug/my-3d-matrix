@@ -71,11 +71,12 @@
 
     <script>
         // ==========================================
-        // 🔐 Supabase 初始化配置 (请替换成你自己的凭证)
+        // 🔐 Supabase 初始化配置 
         // ==========================================
         const SUPABASE_URL = 'https://ybjgkfhcagqqfnqekycr.supabase.co'; 
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InliamdrZmhjYWdxcWZucWVreWNyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2OTk0OTUsImV4cCI6MjA5NzI3NTQ5NX0.jG4Hm9JPPBQ9J4jQKCtZDa5MDF_vGYlUo7drur8Xv6g';
         
+        // 全局只在这里声明一次 supabase 实例，安全无虞
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // ==========================================
@@ -102,18 +103,17 @@
             }
 
             if (!records || records.length === 0) {
-                container.innerHTML = `<div class="text-center py-12 text-slate-500 text-sm">暂无投注记录，请前往数据库添加。</div>`;
+                container.innerHTML = `<div class="text-center py-12 text-slate-500 text-sm">暂无投注记录，数据库为空。</div>`;
                 document.getElementById('record-count-badge').innerText = `0 期`;
                 return;
             }
 
-            container.innerHTML = ''; // 清空加载提示
+            container.innerHTML = ''; 
 
-            // 2. 遍历数据生成 2026 卡片流
+            // 2. 遍历数据生成卡片流
             records.forEach(record => {
-                // 转换成数字计算
-                const betAmount = parseFloat(record.bet_amount);
-                const prizeAmount = parseFloat(record.prize_amount);
+                const betAmount = parseFloat(record.bet_amount || 0);
+                const prizeAmount = parseFloat(record.prize_amount || 0);
                 
                 totalBet += betAmount;
                 totalPrize += prizeAmount;
@@ -122,9 +122,10 @@
 
                 const itemProfit = prizeAmount - betAmount;
 
-                // 3. 处理大底号码展示逻辑（如果号码太多，列表里默认折叠或只展示一部分摘要，防止页面拉得巨长）
-                const totalNumbersCount = record.my_bets.length;
-                const formattedDate = record.draw_date.substring(5); // 把 2026-06-23 切成 06-23
+                // 容错处理：确保 my_bets 存在才读取长度
+                const totalNumbersCount = record.my_bets ? record.my_bets.length : 0;
+                // 容错处理：处理日期截取
+                const formattedDate = record.draw_date ? record.draw_date.substring(5) : '未知'; 
 
                 // 4. 生成开奖号码立体球 HTML
                 let ballsHtml = `<span class="text-xs text-slate-500 py-1 px-4">等待开奖</span>`;
@@ -153,13 +154,13 @@
                     <div class="flex flex-wrap items-center gap-4 md:gap-6">
                         <div>
                             <div class="text-sm font-semibold text-slate-200">${formattedDate}</div>
-                            <div class="text-xs text-slate-500 mt-0.5">第 ${record.issue_number} 期</div>
+                            <div class="text-xs text-slate-500 mt-0.5">第 ${record.issue_number || '---'} 期</div>
                         </div>
                         <div class="flex gap-2 bg-black/20 px-3 py-1.5 rounded-xl border border-slate-800/50">${ballsHtml}</div>
                         <div>
                             <div class="text-xs flex items-center gap-2">
                                 <span class="bg-slate-800/80 text-slate-400 px-1.5 py-0.5 rounded text-[10px]">
-                                    ${record.bet_type}
+                                    ${record.bet_type || '直选'}
                                 </span>
                                 <span class="text-slate-400">
                                     已录入大底：<span class="font-mono text-amber-500 font-bold">${totalNumbersCount}</span> 注号码
@@ -203,7 +204,6 @@
             }
         }
 
-        // 页面加载完毕后自动运行
         window.onload = loadAndRenderDashboard;
     </script>
 </body>
