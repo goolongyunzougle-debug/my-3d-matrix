@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D MATRIX - 数据录入</title>
+    <title>3D MATRIX - 数据录入与补全</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -14,23 +14,39 @@
 </head>
 <body class="text-slate-100 font-sans antialiased p-4 md:p-8">
 
-    <div class="max-w-2xl mx-auto space-y-8">
+    <div class="max-w-2xl mx-auto space-y-6">
         
         <header class="flex items-center justify-between border-b border-slate-800 pb-6">
             <div>
                 <h1 class="text-xl md:text-2xl font-black tracking-tight bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
                     数据录入中心
                 </h1>
-                <p class="text-xs text-slate-400 mt-1">录入福彩 3D 投注明细至 Supabase 数据库</p>
+                <p class="text-xs text-slate-400 mt-1">录入或补全福彩 3D 投注明细至 Supabase 数据库</p>
             </div>
             <a href="index.html" class="text-xs bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-lg px-3 py-2 text-slate-300 transition-all">
                 返回数据看板 ➔
             </a>
         </header>
 
+        <section class="bg-slate-900/60 border border-amber-500/20 backdrop-blur-md rounded-2xl p-5 space-y-3 shadow-lg shadow-amber-950/5">
+            <h2 class="text-xs font-bold text-amber-400 tracking-wider uppercase flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                ⏳ 待开奖数据快捷补全
+            </h2>
+            <p class="text-[11px] text-slate-400">点击下方未开奖的期号，即可一键将大底信息回填到表单进行数据补全。</p>
+            <div id="pending-list" class="flex flex-wrap gap-2 pt-1">
+                <span class="text-xs text-slate-500">正在检查未开奖数据...</span>
+            </div>
+        </section>
+
         <main class="bg-slate-900/40 border border-slate-800/80 backdrop-blur-md rounded-2xl p-6 shadow-xl space-y-6">
             
             <div id="alert-box" class="hidden text-sm p-4 rounded-xl border transition-all duration-300"></div>
+
+            <div id="edit-indicator" class="hidden flex items-center justify-between bg-blue-500/10 border border-blue-500/20 px-4 py-2.5 rounded-xl text-xs text-blue-400">
+                <span class="font-medium">🔄 当前正在补全：<strong id="edit-target" class="font-mono text-amber-400 font-bold"></strong> 这一期</span>
+                <button type="button" onclick="cancelEditMode()" class="text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded transition-all">取消修改</button>
+            </div>
 
             <form id="lottery-form" class="space-y-5" onsubmit="handleSubmit(event)">
                 
@@ -76,13 +92,13 @@
                     <label class="text-xs font-semibold text-slate-400 tracking-wide">开奖状态观测</label>
                     <div class="grid grid-cols-3 gap-3">
                         <label class="flex items-center justify-center gap-2 border border-slate-800 rounded-xl p-3 text-sm cursor-pointer hover:border-slate-700 transition-all bg-black/10">
-                            <input type="radio" name="status" value="pending" checked onclick="toggleStatusFields('pending')" class="accent-amber-500"> 🛡️ 待开奖
+                            <input type="radio" name="status" id="status-pending" value="pending" checked onclick="toggleStatusFields('pending')" class="accent-amber-500"> 🛡️ 待开奖
                         </label>
                         <label class="flex items-center justify-center gap-2 border border-slate-800 rounded-xl p-3 text-sm cursor-pointer hover:border-slate-700 transition-all bg-black/10">
-                            <input type="radio" name="status" value="won" onclick="toggleStatusFields('won')" class="accent-emerald-500"> 🎉 已中奖
+                            <input type="radio" name="status" id="status-won" value="won" onclick="toggleStatusFields('won')" class="accent-emerald-500"> 🎉 已中奖
                         </label>
                         <label class="flex items-center justify-center gap-2 border border-slate-800 rounded-xl p-3 text-sm cursor-pointer hover:border-slate-700 transition-all bg-black/10">
-                            <input type="radio" name="status" value="lost" onclick="toggleStatusFields('lost')" class="accent-rose-500"> ❌ 未中奖
+                            <input type="radio" name="status" id="status-lost" value="lost" onclick="toggleStatusFields('lost')" class="accent-rose-500"> ❌ 未中奖
                         </label>
                     </div>
                 </div>
@@ -118,8 +134,91 @@
         
         const dbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // 设置默认日期为今天
-        document.getElementById('draw_date').valueAsDate = new Date();
+        // 🚀 全局核心变量：用来临时存当前加载的所有未开奖纪录，以及正在修改的记录自增ID
+        let currentPendingRecords = [];
+        let editingRecordId = null;
+
+        // 初始化加载
+        window.onload = async function() {
+            resetFormDefaults();
+            await fetchPendingRecords();
+        };
+
+        // 恢复表单默认值
+        function resetFormDefaults() {
+            document.getElementById('draw_date').valueAsDate = new Date();
+            editingRecordId = null;
+            document.getElementById('edit-indicator').classList.add('hidden');
+            document.getElementById('submit-btn').innerText = '保存记录并上传数据库';
+            document.getElementById('issue_number').removeAttribute('readonly');
+            toggleStatusFields('pending');
+        }
+
+        // 🚀 核心逻辑 1：去数据库捞所有未开奖记录 (status = pending)并呈现在顶部
+        async function fetchPendingRecords() {
+            const listContainer = document.getElementById('pending-list');
+            
+            const { data, error } = await dbClient
+                .from('lottery_records')
+                .select('*')
+                .eq('status', 'pending')
+                .order('issue_number', { ascending: false });
+
+            if (error) {
+                console.error('获取未开奖数据失败:', error);
+                listContainer.innerHTML = `<span class="text-xs text-rose-400">加载未开奖记录失败</span>`;
+                return;
+            }
+
+            currentPendingRecords = data || [];
+
+            if (currentPendingRecords.length === 0) {
+                listContainer.innerHTML = `<span class="text-xs text-slate-500 font-mono">🎉 完美！当前暂无待开奖的大底记录。</span>`;
+                return;
+            }
+
+            // 渲染按钮组
+            listContainer.innerHTML = currentPendingRecords.map(record => `
+                <button type="button" onclick="selectPendingRecord(${record.id})" 
+                        class="text-xs bg-slate-800/80 hover:bg-amber-500 hover:text-slate-950 border border-slate-700 hover:border-amber-400 font-mono text-slate-300 font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer">
+                    第 ${record.issue_number} 期
+                </button>
+            `).join('');
+        }
+
+        // 🚀 核心逻辑 2：点击期号，自动回填表单
+        function selectPendingRecord(id) {
+            const record = currentPendingRecords.find(r => r.id === id);
+            if (!record) return;
+
+            editingRecordId = record.id;
+            
+            // 数据回填
+            document.getElementById('issue_number').value = record.issue_number;
+            document.getElementById('issue_number').setAttribute('readonly', 'readonly'); // 修改时防止误触期号
+            document.getElementById('draw_date').value = record.draw_date || '';
+            document.getElementById('bet_type').value = record.bet_type || '直选';
+            document.getElementById('bet_amount').value = record.bet_amount || '';
+            document.getElementById('my_bets').value = record.my_bets ? record.my_bets.join(', ') : '';
+
+            // 既然要补全，默认帮用户切到 “已中奖”，让输入框露出来
+            document.getElementById('status-won').checked = true;
+            toggleStatusFields('won');
+
+            // 切换为修改模式状态UI
+            document.getElementById('edit-target').innerText = record.issue_number;
+            document.getElementById('edit-indicator').classList.remove('hidden');
+            document.getElementById('submit-btn').innerText = '🔄 更新未开奖记录并补全数据';
+            
+            // 顺滑滚动回表单顶部
+            document.getElementById('edit-indicator').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // 取消修改模式
+        function cancelEditMode() {
+            document.getElementById('lottery-form').reset();
+            resetFormDefaults();
+        }
 
         // 动态切换开奖字段显示/隐藏
         function toggleStatusFields(status) {
@@ -142,7 +241,7 @@
             }
         }
 
-        // 提交表单逻辑
+        // 提交表单逻辑（智能适配 Insert 与 Update）
         async function handleSubmit(event) {
             event.preventDefault();
             
@@ -150,7 +249,7 @@
             const alertBox = document.getElementById('alert-box');
             
             submitBtn.disabled = true;
-            submitBtn.innerText = '正在上传数据...';
+            submitBtn.innerText = editingRecordId ? '正在更新数据库...' : '正在上传数据...';
             
             const issue_number = document.getElementById('issue_number').value.trim();
             const draw_date = document.getElementById('draw_date').value;
@@ -171,53 +270,64 @@
 
             if (status !== 'pending') {
                 const rawNumbers = document.getElementById('draw_numbers').value.trim();
-                
-                // 🚀 优化 2 核心核心处理逻辑：把输入的 "456" 智能切分成 ['4', '5', '6']
                 if (rawNumbers.length === 3) {
                     draw_numbers = rawNumbers.split('');
                 } else {
-                    // 防呆设计：万一输错了不是3位，依然尝试按常规切分
                     draw_numbers = rawNumbers.split(/[\s,，]*/).filter(item => item.length > 0);
                 }
-                
                 prize_amount = parseFloat(document.getElementById('prize_amount').value || 0);
             }
 
-            // 上传至 Supabase
-            const { error } = await dbClient
-                .from('lottery_records')
-                .insert([
-                    {
-                        issue_number,
-                        draw_date,
-                        bet_type,
-                        bet_amount,
-                        my_bets,
-                        status,
-                        draw_numbers,
-                        prize_amount
-                    }
-                ]);
+            const payload = {
+                issue_number,
+                draw_date,
+                bet_type,
+                bet_amount,
+                my_bets,
+                status,
+                draw_numbers,
+                prize_amount
+            };
 
-            if (error) {
-                console.error('上传失败:', error);
+            let responseError = null;
+
+            // 🚀 核心分支决策：判断是编辑旧的还是插入新的
+            if (editingRecordId) {
+                // 执行更新 (Update)
+                const { error } = await dbClient
+                    .from('lottery_records')
+                    .update(payload)
+                    .eq('id', editingRecordId);
+                responseError = error;
+            } else {
+                // 执行新增 (Insert)
+                const { error } = await dbClient
+                    .from('lottery_records')
+                    .insert([payload]);
+                responseError = error;
+            }
+
+            if (responseError) {
+                console.error('操作失败:', responseError);
                 alertBox.className = "text-sm p-4 rounded-xl border bg-rose-950/20 border-rose-500/30 text-rose-400";
-                alertBox.innerText = `❌ 保存失败: ${error.message}`;
+                alertBox.innerText = `❌ 保存失败: ${responseError.message}`;
                 alertBox.classList.remove('hidden');
                 
                 submitBtn.disabled = false;
-                submitBtn.innerText = '保存记录并上传数据库';
+                submitBtn.innerText = editingRecordId ? '🔄 更新未开奖记录并补全数据' : '保存记录并上传数据库';
             } else {
                 alertBox.className = "text-sm p-4 rounded-xl border bg-emerald-950/20 border-emerald-500/30 text-emerald-400";
-                alertBox.innerText = `🎉 第 ${issue_number} 期记录已完美保存！已成功解析 ${my_bets.length} 注大底号码。`;
+                alertBox.innerText = editingRecordId 
+                    ? `🎉 第 ${issue_number} 期记录已完美补全并更新！` 
+                    : `🎉 第 ${issue_number} 期记录已完美创建！已成功解析 ${my_bets.length} 注大底号码。`;
                 alertBox.classList.remove('hidden');
                 
+                // 清理并恢复默认模式
                 document.getElementById('lottery-form').reset();
-                document.getElementById('draw_date').valueAsDate = new Date();
-                toggleStatusFields('pending');
+                resetFormDefaults();
                 
-                submitBtn.disabled = false;
-                submitBtn.innerText = '保存记录并上传数据库';
+                // 重新刷新待开奖列表
+                await fetchPendingRecords();
                 
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
