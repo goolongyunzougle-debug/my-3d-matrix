@@ -45,7 +45,7 @@
 
             <div id="edit-indicator" class="hidden flex items-center justify-between bg-blue-500/10 border border-blue-500/20 px-4 py-2.5 rounded-xl text-xs text-blue-400">
                 <span class="font-medium">🔄 当前正在补全：<strong id="edit-target" class="font-mono text-amber-400 font-bold"></strong> 这一期</span>
-                <button type="button" onclick="cancelEditMode()" class="text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded transition-all">取消修改</button>
+                <button type="button" onclick="cancelEditMode()" class="text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded transition-all cursor-pointer">取消修改</button>
             </div>
 
             <form id="lottery-form" class="space-y-5" onsubmit="handleSubmit(event)">
@@ -134,17 +134,14 @@
         
         const dbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // 🚀 全局核心变量：用来临时存当前加载的所有未开奖纪录，以及正在修改的记录自增ID
         let currentPendingRecords = [];
         let editingRecordId = null;
 
-        // 初始化加载
         window.onload = async function() {
             resetFormDefaults();
             await fetchPendingRecords();
         };
 
-        // 恢复表单默认值
         function resetFormDefaults() {
             document.getElementById('draw_date').valueAsDate = new Date();
             editingRecordId = null;
@@ -154,7 +151,7 @@
             toggleStatusFields('pending');
         }
 
-        // 🚀 核心逻辑 1：去数据库捞所有未开奖记录 (status = pending)并呈现在顶部
+        // 🚀 优化：完全改用动态绑定事件监听，杜绝大底内有换行导致的 HTML 语法中断错误
         async function fetchPendingRecords() {
             const listContainer = document.getElementById('pending-list');
             
@@ -177,16 +174,24 @@
                 return;
             }
 
-            // 渲染按钮组
-            listContainer.innerHTML = currentPendingRecords.map(record => `
-                <button type="button" onclick="selectPendingRecord(${record.id})" 
-                        class="text-xs bg-slate-800/80 hover:bg-amber-500 hover:text-slate-950 border border-slate-700 hover:border-amber-400 font-mono text-slate-300 font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer">
-                    第 ${record.issue_number} 期
-                </button>
-            `).join('');
+            listContainer.innerHTML = '';
+
+            // 使用原生的纯净 DOM 创建，不通过字符串拼接 onclick 传递带有潜在断行的大底
+            currentPendingRecords.forEach(record => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = "text-xs bg-slate-800/80 hover:bg-amber-500 hover:text-slate-950 border border-slate-700 hover:border-amber-400 font-mono text-slate-300 font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer";
+                btn.innerText = `第 ${record.issue_number} 期`;
+                
+                // 纯安全的 JS 内部事件绑定
+                btn.addEventListener('click', () => {
+                    selectPendingRecord(record.id);
+                });
+
+                listContainer.appendChild(btn);
+            });
         }
 
-        // 🚀 核心逻辑 2：点击期号，自动回填表单
         function selectPendingRecord(id) {
             const record = currentPendingRecords.find(r => r.id === id);
             if (!record) return;
@@ -195,32 +200,30 @@
             
             // 数据回填
             document.getElementById('issue_number').value = record.issue_number;
-            document.getElementById('issue_number').setAttribute('readonly', 'readonly'); // 修改时防止误触期号
+            document.getElementById('issue_number').setAttribute('readonly', 'readonly'); 
             document.getElementById('draw_date').value = record.draw_date || '';
             document.getElementById('bet_type').value = record.bet_type || '直选';
             document.getElementById('bet_amount').value = record.bet_amount || '';
+            
+            // 回填号码，多行格式或单行都可以完美兼容
             document.getElementById('my_bets').value = record.my_bets ? record.my_bets.join(', ') : '';
 
-            // 既然要补全，默认帮用户切到 “已中奖”，让输入框露出来
+            // 自动开启中奖结果输入框
             document.getElementById('status-won').checked = true;
             toggleStatusFields('won');
 
-            // 切换为修改模式状态UI
             document.getElementById('edit-target').innerText = record.issue_number;
             document.getElementById('edit-indicator').classList.remove('hidden');
             document.getElementById('submit-btn').innerText = '🔄 更新未开奖记录并补全数据';
             
-            // 顺滑滚动回表单顶部
             document.getElementById('edit-indicator').scrollIntoView({ behavior: 'smooth' });
         }
 
-        // 取消修改模式
         function cancelEditMode() {
             document.getElementById('lottery-form').reset();
             resetFormDefaults();
         }
 
-        // 动态切换开奖字段显示/隐藏
         function toggleStatusFields(status) {
             const resultFields = document.getElementById('result-fields');
             const drawNumbersInput = document.getElementById('draw_numbers');
@@ -241,7 +244,6 @@
             }
         }
 
-        // 提交表单逻辑（智能适配 Insert 与 Update）
         async function handleSubmit(event) {
             event.preventDefault();
             
@@ -257,14 +259,12 @@
             const bet_amount = parseFloat(document.getElementById('bet_amount').value);
             const status = document.querySelector('input[name="status"]:checked').value;
 
-            // 解析大底号码
             const rawBetsText = document.getElementById('my_bets').value;
             const my_bets = rawBetsText
                 .split(/[\s,，\n]+/) 
                 .map(item => item.trim())
                 .filter(item => item.length > 0);
 
-            // 解析开奖号码与中奖金额
             let draw_numbers = null;
             let prize_amount = 0;
 
@@ -291,16 +291,13 @@
 
             let responseError = null;
 
-            // 🚀 核心分支决策：判断是编辑旧的还是插入新的
             if (editingRecordId) {
-                // 执行更新 (Update)
                 const { error } = await dbClient
                     .from('lottery_records')
                     .update(payload)
                     .eq('id', editingRecordId);
                 responseError = error;
             } else {
-                // 执行新增 (Insert)
                 const { error } = await dbClient
                     .from('lottery_records')
                     .insert([payload]);
@@ -322,13 +319,10 @@
                     : `🎉 第 ${issue_number} 期记录已完美创建！已成功解析 ${my_bets.length} 注大底号码。`;
                 alertBox.classList.remove('hidden');
                 
-                // 清理并恢复默认模式
                 document.getElementById('lottery-form').reset();
                 resetFormDefaults();
                 
-                // 重新刷新待开奖列表
                 await fetchPendingRecords();
-                
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
         }
