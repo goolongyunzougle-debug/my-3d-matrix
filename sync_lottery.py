@@ -17,17 +17,31 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 def fetch_from_werechat_free():
     print("🔄 开始通过微信读书开源通道读取公众号文章...")
     
-    # “拼搏在线彩神通软件”在微信读书里的唯一公众号ID
     mp_id = "MzA3NDM1NzE0OQ==" 
     url = f"https://weread.qq.com/web/mp/officials/{mp_id}/articles"
     
+    # 🚀 升级版请求头，完全模拟真实浏览器行为
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Cookie": WEREAD_COOKIE
+        "Cookie": WEREAD_COOKIE,
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "Referer": f"https://weread.qq.com/web/mp/officials/{mp_id}",
+        "Origin": "https://weread.qq.com",
+        "Connection": "keep-alive"
     }
     
     try:
         response = requests.get(url, headers=headers, timeout=15)
+        
+        # 🚀 调试保障：如果状态码不是 200，打印出来
+        print(f"📡 服务器回应状态码: {response.status_code}")
+        
+        # 如果返回的不是 JSON，打印前200个字看看是什么拒绝信息
+        if not response.text.strip().startswith("{"):
+            print(f"⚠️ 警告: 服务器没有返回JSON。返回内容前200字为:\n{response.text[:200]}")
+            return None, None
+            
         res_json = response.json()
         
         articles = res_json.get("articles", [])
@@ -42,7 +56,6 @@ def fetch_from_werechat_free():
         full_text = f"{title} {excerpt}"
         print(f"📰 成功捕获最新推文标题: {title}")
         
-        # 精准匹配：2026165 期福彩 3D ... 模拟试机号：[344]
         pattern = r'(\d{7})\s*期福彩\s*3D\s*[\d-]*\s*彩神通模拟试机号：\[(\d{3})\]'
         match = re.search(pattern, full_text)
         
