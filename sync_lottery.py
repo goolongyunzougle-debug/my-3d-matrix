@@ -13,67 +13,73 @@ if not SUPABASE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def fetch_directly_from_wechat():
-    print("🔄 正在通过微信开放通道直接检索公众号历史文章...")
+def fetch_pure_cst_lottery():
+    print("🔄 正在通过公开文章镜像网网关，精准锁定【拼搏在线彩神通软件】推文内容...")
     
-    # 使用公开的搜狗微信聚合代理，直接拉取“拼搏在线彩神通软件”的最新文章列表
-    # 这个公用历史页不封海外 IP，也不需要经常更换 Cookie，非常稳定
-    search_url = "https://weixin.sogou.com/weixin?type=1&query=%E6%8B%BC%E6%90%8F%E5%9C%A8%E7%BA%BF%E5%BD%A9%E7%A5%9E%E9%80%9A%E8%BD%AF%E4%BB%B6&ie=utf8"
+    # 🚀 使用专用的微信文章聚合网网关，直接请求该公众号的专属历史列表
+    # 微信内部 ID：gh_3e70d44be5f8（即拼搏在线彩神通软件）
+    url = "https://wemp.app/accounts/gh_3e70d44be5f8"
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2"
+        "Accept-Language": "zh-CN,zh;q=0.8"
     }
     
     try:
-        response = requests.get(search_url, headers=headers, timeout=15)
+        response = requests.get(url, headers=headers, timeout=15)
+        response.encoding = 'utf-8'
+        
+        if response.status_code != 200:
+            print(f"❌ 镜像网关请求失败，状态码: {response.status_code}")
+            return None, None
+            
         html_content = response.text
         
-        # 1. 尝试从公开索引页直接抓取带有“试机号”字样的最新推文标题
-        print("📡 正在解析数据流...")
+        # 1. 拦截该公众号最新的文章标题
+        # 镜像站的 HTML 结构中，标题通常包裹在后方
+        print("📡 正在从该公众号历史流中剥离最新的彩神通文案...")
         
-        # 匹配包含期号和试机号的大底文本特征
-        # 微信推文的标题通常会直接暴露在 html 的 txt-box 中
-        titles = re.findall(r'target="_blank"[^>]*>(.*?)</a>', html_content)
+        # 寻找包含“期福彩3D”和“彩神通”字样的最新条目
+        # 匹配形如：2026165期福彩3D...彩神通模拟试机号：[344]
+        pattern = r'(\d{7})\s*期福彩\s*3D\s*[\d-]*\s*彩神通模拟试机号：\[(\d{3})\]'
+        match = re.search(pattern, html_content)
         
-        target_text = ""
-        for t in titles:
-            # 清理 html 标签
-            clean_title = re.sub(r'<[^>]+>', '', t)
-            if "彩神通" in clean_title or "试机号" in clean_title:
-                target_text = clean_title
-                print(f"📰 捕获到相关推文线索: {clean_title}")
-                break
-                
-        # 如果搜狗聚合页直接能看到标题，直接从标题解密
-        if target_text:
-            pattern = r'(\d{7})\s*期.*试机号：\[(\d{3})\]'
-            match = re.search(pattern, target_text)
-            if match:
-                issue_number = match.group(1)
-                test_num_str = match.group(2)
-                print(f"✅ 从聚合页直接拦截成功！期号: {issue_number}, 试机号: {list(test_num_str)}")
-                return issue_number, list(test_num_str)
-
-        # 2. 如果第一步没截到，使用备用微信公共数据源通道
-        print("💡 切换至备用公共数据源通道...")
-        backup_url = "https://m. thosee.com/wx/gh_3e70d44be5f8" # 这是该公众号在开放平台的镜像
-        # 针对部分特殊彩票类做降级处理，直接到开放网关拉取
-        res_backup = requests.get("https://lottery.v6.api.ijisuan.com/3d/test_number", timeout=10)
-        if res_backup.status_code == 200:
-            data = res_backup.json()
-            # 接口返回通常为 {"issue": "2026165", "nums": "344"}
-            issue = str(data.get("issue"))
-            nums = list(str(data.get("nums")))
-            print(f"✅ 从备用公共网关获取成功！期号: {issue}, 试机号: {nums}")
-            return issue, nums
-
-        print("⚠️ 本次运行未能在公开页面截获到最新的试机号格式。")
+        # 备用匹配：如果标题被截断，尝试匹配标题+摘要组合
+        if not match:
+            # 匹配 7位期号 和 3位试机号
+            issue_match = re.search(r'(\d{7})\s*期', html_content)
+            num_match = re.search(r'试机号：\[(\d{3})\]', html_content)
+            if issue_match and num_match:
+                issue_number = issue_match.group(1)
+                draw_numbers_array = list(num_match.group(1))
+                print(f"✅ [备用规则] 成功拦截【彩神通】专属数据！期号: {issue_number}, 试机号: {draw_numbers_array}")
+                return issue_number, draw_numbers_array
+        
+        if match:
+            issue_number = match.group(1)
+            test_num_str = match.group(2)
+            draw_numbers_array = list(test_num_str)
+            
+            print(f"✅ [标准规则] 成功拦截【彩神通】专属数据！期号: {issue_number}, 试机号: {draw_numbers_array}")
+            return issue_number, draw_numbers_array
+            
+        # ----------------- 方案 B：如果 wemp 挂了，切入二十一点微信聚合站 -----------------
+        print("💡 正在尝试备用【彩神通】文章聚合通道...")
+        backup_url = "https://www.v21.cc/wemp/gh_3e70d44be5f8.html"
+        backup_res = requests.get(backup_url, headers=headers, timeout=10)
+        backup_res.encoding = 'utf-8'
+        
+        b_match = re.search(pattern, backup_res.text)
+        if b_match:
+            print(f"✅ [备用网关] 成功拦截【彩神通】专属数据！")
+            return b_match.group(1), list(b_match.group(2))
+            
+        print("⚠️ 未能在该公众号的镜像页面中解析到带有 '彩神通模拟试机号：[xxx]' 的标准格式。")
         return None, None
             
     except Exception as e:
-        print(f"❌ 抓取流程发生异常: {e}")
+        print(f"❌ 解析该公众号历史流发生异常: {e}")
         return None, None
 
 def update_supabase(issue_number, draw_numbers):
@@ -103,6 +109,6 @@ def update_supabase(issue_number, draw_numbers):
         print(f"❌ Supabase 数据库操作异常: {e}")
 
 if __name__ == "__main__":
-    issue, nums = fetch_directly_from_wechat()
+    issue, nums = fetch_pure_cst_lottery()
     if issue and nums:
         update_supabase(issue, nums)
