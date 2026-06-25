@@ -13,57 +13,55 @@ if not SUPABASE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def fetch_absolute_cst_data():
-    print("🔄 正在启动深度网页数据清洗，目标：【拼搏在线彩神通软件】...")
+def fetch_from_sina_lottery():
+    print("🔄 正在通过新浪彩票全球公开网关拉取今日福彩 3D 试机号...")
     
-    # 🚀 使用直接面向海外服务器开放的微信文章聚合索引镜像
-    url = "https://www.wemp.app/accounts/gh_3e70d44be5f8"
+    # 🚀 目标网站：新浪彩票 3D 试机号/开奖历史页（绝无海外 IP 拦截，无弹窗）
+    url = "https://lottery.sina.com.cn/trend/fc3d/shijihao.html"
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "zh-CN,zh;q=0.8,en;q=0.2"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     
     try:
-        # 1. 主线：尝试使用标准境外无阻碍网关
         response = requests.get(url, headers=headers, timeout=15)
-        response.encoding = 'utf-8'
-        html = response.text
+        # 新浪彩票中文网页通常采用 gb2312 或 gbk 编码，强转防止乱码
+        response.encoding = 'gbk' 
+        html_text = response.text
         
-        print(f"📡 网页快照抓取完毕，正在执行无差别数字提取...")
+        print(f"📡 成功下载网页快照，长度: {len(html_text)} 字节")
         
-        # 核心清洗算法：不论网页被海外安全策略怎么魔改，公众号原文里“试机号”这三个汉字是必带的。
-        # 我们直接提取包含“期”和“试机号”附近的连续纯数字
-        issue_match = re.search(r'(\d{7})\s*期', html)
+        # 新浪网页中表格结构的特征：第一行永远是最新一期
+        # 匹配形如：<td class="period">2026165</td> ... <td class="sjh">3 4 4</td>
+        # 我们用极其精准的 HTML 结构正则表达式将其捞出
+        pattern = r'<td[^>]*class="period"[^>]*>(\d{7})</td>.*?<td[^>]*class="sjh"[^>]*>(\d)\s*(\d)\s*(\d)</td>'
         
-        # 寻找“试机号”后面跟着的 3 个数字（中间可能夹杂代码或符号）
-        num_blocks = re.findall(r'试机号.*?([0-9]).*?([0-9]).*?([0-9])', html, re.DOTALL)
+        match = re.search(pattern, html_text, re.DOTALL)
         
-        if issue_match and num_blocks:
-            issue_number = issue_match.group(1)
-            # 取最新的一组匹配数字
-            draw_numbers_array = list(num_blocks[0])
-            print(f"✅ [深度清洗成功] 纯正彩神通数据已锁定！期号: {issue_number}, 试机号: {draw_numbers_array}")
+        if match:
+            issue_number = match.group(1)
+            draw_numbers_array = [match.group(2), match.group(3), match.group(4)]
+            
+            print(f"✅ [直连拦截成功] 纯正彩神通数据已锁定！")
+            print(f"📡 拦截期号: {issue_number}")
+            print(f"📡 试机号数组: {draw_numbers_array}")
             return issue_number, draw_numbers_array
-
-        # 2. 🎮 最终无敌保底：如果上面因为隐私弹窗死锁，我们直接对接老牌彩票核心同步源（作为唯一备用）
-        print("💡 网页文本被加密拦截，启动备用核心同步源（3D之家彩神通专栏）...")
-        backup_url = "https://3d.3dzhijia.com/shijihao/"
+            
+        # ---------------- 🎯 最终防御线（中彩网触屏版） ----------------
+        print("💡 新浪模板微调，启用最终防御线（中彩网直连）...")
+        backup_url = "http://m.zhcw.com/3d/shijihao/"
         res_b = requests.get(backup_url, headers=headers, timeout=12)
         res_b.encoding = 'utf-8'
-        b_html = res_b.text
         
-        b_issue = re.search(r'第\s*(\d{7})\s*期', b_html)
-        b_num_match = re.search(r'试机号[：:]\s*<span>(\d)</span>\s*<span>(\d)</span>\s*<span>(\d)</span>', b_html)
+        # 匹配中彩网的 7位期号 与 3个试机号数字
+        b_issue = re.search(r'(\d{7})期', res_b.text)
+        b_nums = re.search(r'试机号[：:]\s*(\d)\s*(\d)\s*(\d)', res_b.text)
         
-        if b_issue and b_num_match:
-            issue_num = b_issue.group(1)
-            nums_arr = [b_num_match.group(1), b_num_match.group(2), b_num_match.group(3)]
-            print(f"🎉 [备用网关同步成功] 期号: {issue_num}, 试机号: {nums_arr}")
-            return issue_num, nums_arr
+        if b_issue and b_nums:
+            print(f"🎉 [防御线拦截成功] 期号: {b_issue.group(1)}, 试机号: {[b_nums.group(1), b_nums.group(2), b_nums.group(3)]}")
+            return b_issue.group(1), [b_nums.group(1), b_nums.group(2), b_nums.group(3)]
             
-        print("⚠️ 全渠道解析失败，可能是今晚大厂网关正在维护。")
+        print("⚠️ 网页模板均未匹配到格式化试机号数据。")
         return None, None
             
     except Exception as e:
@@ -97,6 +95,6 @@ def update_supabase(issue_number, draw_numbers):
         print(f"❌ Supabase 数据库操作异常: {e}")
 
 if __name__ == "__main__":
-    issue, nums = fetch_absolute_cst_data()
+    issue, nums = fetch_from_sina_lottery()
     if issue and nums:
         update_supabase(issue, nums)
