@@ -1,0 +1,31 @@
+name: 每日自动补全试机号
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    # 🕒 每天北京时间下午 17:05 自动运行（转换成国际标准时 UTC 是 09:05）
+    - cron: '55 8 * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 检查仓库代码
+      uses: actions/checkout@v3
+
+    - name: 初始化 Python 环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: 安装运行依赖
+      run: |
+        pip install requests supabase
+
+    - name: 执行抓取与同步
+      env:
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        WEREAD_COOKIE: ${{ secrets.WEREAD_COOKIE }}
+      run: python sync_lottery.py
